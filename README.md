@@ -603,7 +603,7 @@ Lab 1.
 
 ### 3.1\. Collaboration
 
-All CSE 444 labs are to be completed **INDIVIDUALLY**! However, you may discuss your high-level approach to solving each lab with other students in the class.
+Lab 1 part 1 must be done individually. After that you may work in groups of up to two people. You may discuss your high-level approach to solving each lab with other students in the class, but not share code with people outside your two-person group.
 
 ### 3.2\. Submitting your assignment
 
