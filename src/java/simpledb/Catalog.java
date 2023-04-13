@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The Catalog keeps track of all available tables in the database and their
@@ -18,10 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Catalog {
 
-    private ConcurrentHashMap<String, Integer> nameToId;
-    private ConcurrentHashMap<Integer, Table> idToTable;
-    private ConcurrentHashMap<String, String> lowercaseToName;
-
+    private HashMap<String, Integer> nameToId;
+    private HashMap<Integer, Table> idToTable;
+    private HashMap<String, String> lowercaseToName;
 
     // table class
     // - contain file, name and primary key
@@ -45,9 +43,9 @@ public class Catalog {
      */
     public Catalog() {
         // some code goes here
-        this.nameToId = new ConcurrentHashMap<>();
-        this.idToTable = new ConcurrentHashMap<>();
-        this.lowercaseToName = new ConcurrentHashMap<>();
+        this.nameToId = new HashMap<>();
+        this.idToTable = new HashMap<>();
+        this.lowercaseToName = new HashMap<>();
     }
 
     /**
