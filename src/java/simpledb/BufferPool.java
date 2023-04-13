@@ -2,7 +2,7 @@ package simpledb;
 
 import java.io.*;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -26,7 +26,7 @@ public class BufferPool {
      constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
-    private ConcurrentHashMap<PageId, Page> pool;
+    private HashMap<PageId, Page> pool;
     private int numPages;
 
 
@@ -37,7 +37,7 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
-        this.pool = new ConcurrentHashMap<>();
+        this.pool = new HashMap<>();
         this.numPages = numPages;
     }
 
