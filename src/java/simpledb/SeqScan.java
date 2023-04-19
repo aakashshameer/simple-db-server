@@ -12,10 +12,9 @@ public class SeqScan implements OpIterator {
     private static final long serialVersionUID = 1L;
 
     private int tableId;
-    private TransactionId tId;
+    private TransactionId tid;
     private String tableAlias;
-    private DbFile file;
-    private DbFileIterator iterator = null;
+    private DbFileIterator iterator;
 
 
     /**
@@ -36,8 +35,9 @@ public class SeqScan implements OpIterator {
      */
     public SeqScan(TransactionId tid, int tableid, String tableAlias) {
         // some code goes here
-        this.tId = tid;
-        reset(tableid, tableAlias);
+        this.tid = tid;
+        this.tableId = tableid;
+        this.tableAlias = tableAlias;
     }
 
     /**
@@ -73,7 +73,6 @@ public class SeqScan implements OpIterator {
         // some code goes here
         this.tableId = tableid;
         this.tableAlias = tableAlias;
-        this.file = Database.getCatalog().getDatabaseFile(tableid);
     }
 
     public SeqScan(TransactionId tid, int tableId) {
@@ -82,7 +81,7 @@ public class SeqScan implements OpIterator {
 
     public void open() throws DbException, TransactionAbortedException {
         // some code goes here
-        this.iterator = this.file.iterator(this.tId);
+        this.iterator = Database.getCatalog().getDatabaseFile(this.tableId).iterator(this.tid);
         this.iterator.open();
     }
 
@@ -98,7 +97,7 @@ public class SeqScan implements OpIterator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        TupleDesc tupleDesc = this.file.getTupleDesc();
+        TupleDesc tupleDesc = Database.getCatalog().getDatabaseFile(this.tableId).getTupleDesc();
         int fieldsNum = tupleDesc.numFields();
 
         // arrays for fields and types
@@ -106,8 +105,8 @@ public class SeqScan implements OpIterator {
         Type[] typeArray = new Type[fieldsNum];
 
         for (int i = 0; i < fieldsNum; i++) {
-            fieldArray[i] = this.tableAlias + "." + tupleDesc.getFieldName(i); // seperate the alias and field name by "."
             typeArray[i] = tupleDesc.getFieldType(i);
+            fieldArray[i] = this.tableAlias + "." + tupleDesc.getFieldName(i); // seperate the alias and field name by "."
         }
 
         return new TupleDesc(typeArray, fieldArray);
@@ -132,15 +131,11 @@ public class SeqScan implements OpIterator {
     public void close() {
         // some code goes here
         this.iterator.close();
-        this.iterator = null;
     }
 
     public void rewind() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
-        if (this.iterator == null) {
-            throw new IllegalStateException();//DbException("iterator hasn't been initialized");
-        }
         this.iterator.rewind();
     }
 }
