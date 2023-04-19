@@ -111,7 +111,7 @@ public class Join extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
-        if (this.child1.hasNext() || this.tuple != null) {
+        while (this.child1.hasNext() || this.tuple != null) {
             if (this.tuple == null) {
                 this.tuple = this.child1.next();
             }
@@ -121,14 +121,11 @@ public class Join extends Operator {
 
                 if (this.jp.filter(this.tuple, tuple2)) {
                     return Tuple.merge(this.tuple, tuple2);
-                } else {
-                    return fetchNext();
                 }
             }
 
             this.tuple = null;
             this.child2.rewind();
-            return fetchNext();
         }
         return null;
     }
