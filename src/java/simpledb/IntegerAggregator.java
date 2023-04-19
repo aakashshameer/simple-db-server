@@ -59,7 +59,7 @@ public class IntegerAggregator implements Aggregator {
         this.afieldName = tup.getTupleDesc().getFieldName(this.afield);
         int aggregate = ((IntField) tup.getField(this.afield)).getValue();
 
-        if (gbfield != NO_GROUPING) {
+        if (this.gbfield != Aggregator.NO_GROUPING) {
             this.gbfieldName = tup.getTupleDesc().getFieldName(this.gbfield);
             mergeTupleIntoGroup(tup.getField(this.gbfield), aggregate);
 
@@ -114,14 +114,14 @@ public class IntegerAggregator implements Aggregator {
     public OpIterator iterator() {
         // some code goes here
         ArrayList<Tuple> tuplesArr = new ArrayList<>();
-        if (gbfield != NO_GROUPING) {
+        if (this.gbfield != Aggregator.NO_GROUPING) {
             // Form TupleDesc
             // name of aggregate column format = aggregate op, aggregate field
             TupleDesc td = new TupleDesc(new Type[]{this.gbfieldtype, Type.INT_TYPE},
                     new String[]{this.gbfieldName, this.what.toString() + ", " + this.afieldName});
 
             // create tuples
-            for (Field f : fieldAggregate.keySet()) {
+            for (Field f : this.fieldAggregate.keySet()) {
 
                 Tuple tup = new Tuple(td);
                 tup.setField(0, f);
