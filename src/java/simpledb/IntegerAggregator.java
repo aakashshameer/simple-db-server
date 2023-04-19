@@ -142,8 +142,9 @@ public class IntegerAggregator implements Aggregator {
             Tuple tup = new Tuple(td);
             tup.setField(0, new IntField(getAggregate(null)));
             tuplesArr.add(tup);
-            return new TupleIterator(td, tuplesArr);
 
+            // Create TupleIterator
+            return new TupleIterator(td, tuplesArr);
         }
     }
 
