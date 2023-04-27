@@ -74,17 +74,17 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
-        if (this.pool.containsKey(pid)) {
-            return this.pool.get(pid);
-        }
+        if (!this.pool.containsKey(pid)) {
+            Page page = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
 
-        Page page = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
-        if (this.pool.size() >= this.numPages) {
-            throw new DbException("not enough space in the buffer pool");
+            // if pool size is greater or equal than numPages, we need to evict
+            if (this.pool.size() >= this.numPages) {
+                this.evictPage();
+            }
+
+            this.pool.put(pid, page);
         }
-        this.pool.put(pid, page);
-        return page;
-    }
+        return this.pool.get(pid);    }
 
     /**
      * Releases the lock on a page.
@@ -222,14 +222,22 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
-        //        if (this.pool.containsKey(pid)) {
-        //            Page page = this.pool.get(pid);
-        //            TransactionId tid = page.isDirty();
-        //            if (tid != null) {
-        //                HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
-        //                file.
-        //            }
-        //        }
+
+        // buffer pool does not contain page
+        if (!this.pool.containsKey(pid)) {
+            return;
+        }
+
+        // buffer pool contains page
+        Page page = this.pool.get(pid);
+        TransactionId dirty = page.isDirty();
+        if (dirty != null) { // check if page is dirty
+            // page is dirty, we want to write it to disk
+            HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
+            heapFile.writePage(page);
+            page.markDirty(false, null);
+        }
+
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -246,6 +254,16 @@ public class BufferPool {
     private synchronized  void evictPage() throws DbException {
         // some code goes here
         // not necessary for lab1
+
+        // pool size is equal or greater than numPages, we need to evict
+        PageId pageId = new ArrayList<PageId>(this.pool.keySet()).get( (int) Math.floor(Math.random() * this.pool.size()));
+
+        try {
+            this.flushPage(pageId);
+        } catch (IOException e) {
+            throw new DbException("Page flush during eviction failed.");
+        }
+        this.pool.remove(pageId);
     }
 
 }
