@@ -117,7 +117,6 @@ public class Insert extends Operator {
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
-        assert children.length >= 1;
         this.child = children[0];
     }
 }
