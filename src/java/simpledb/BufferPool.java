@@ -2,6 +2,7 @@ package simpledb;
 
 import java.io.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 
 /**
@@ -148,6 +149,14 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
+
+        ArrayList<Page> modifiedPage = file.insertTuple(tid, t);
+        for (Page page: modifiedPage) {
+            page.markDirty(true, tid);
+            this.evictPage();
+            this.pool.put(page.getId(), page);
+        }
     }
 
     /**
@@ -167,6 +176,15 @@ public class BufferPool {
             throws DbException, IOException, TransactionAbortedException {
         // some code goes here
         // not necessary for lab1
+        int tableId = t.getRecordId().getPageId().getTableId();
+        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
+
+        ArrayList<Page> modifiedPage = file.deleteTuple(tid, t);
+        for (Page page: modifiedPage) {
+            page.markDirty(true, tid);
+            this.evictPage();
+            this.pool.put(page.getId(), page);
+        }
     }
 
     /**
@@ -177,6 +195,9 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
+        for (PageId pageId: this.pool.keySet()) {
+            this.flushPage(pageId);
+        }
 
     }
 
@@ -191,6 +212,7 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+        this.pool.remove(pid);
     }
 
     /**
@@ -200,6 +222,14 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+        //        if (this.pool.containsKey(pid)) {
+        //            Page page = this.pool.get(pid);
+        //            TransactionId tid = page.isDirty();
+        //            if (tid != null) {
+        //                HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
+        //                file.
+        //            }
+        //        }
     }
 
     /** Write all pages of the specified transaction to disk.
