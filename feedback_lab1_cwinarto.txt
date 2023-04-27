@@ -1,0 +1,15 @@
+Feedback for: cwinarto
+--------------------------------------------------------------
+Total Score (%): 100
+Unit Test Score (out of 32): 32
+System Test Score (out of 4): 4
+Code Score (out of 10): 10
+Writeup Score (out of 10): 10
+--------------------------------------------------------------
+Code Feedback (10/10)
+- I like that in HeapFile's HeapFileIterator, you created a helper function getHeapPageIterator() to reduce redundancy of initializing an iterator for the next heap page while iterating through all the tuples on this HeapFile.
+
+Writeup Feedback (10/10)
+Great job explaining the lab and your design choices in detail! 
+
+- I would encourage you to think about a more complicated unit test such as some edge cases for HeapFile's iterator that were not covered by the given unit tests.
