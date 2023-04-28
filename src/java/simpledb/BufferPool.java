@@ -256,7 +256,6 @@ public class BufferPool {
         // not necessary for lab1
 
         // if pool.size if lesser that than numPages, we don't need to evict
-        // TODO: tell cherry "I told you so"
         if (this.pool.size() < this.numPages) {
             return;
         }
