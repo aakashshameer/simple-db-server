@@ -1,9 +1,8 @@
 package simpledb;
 
-import java.io.*;
-
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -27,8 +26,9 @@ public class BufferPool {
      constructor instead. */
     public static final int DEFAULT_PAGES = 50;
 
-    private HashMap<PageId, Page> pool;
+    private ConcurrentHashMap<PageId, Page> pool;
     private int numPages;
+    private LockManager lockManager;
 
 
     /**
@@ -38,8 +38,9 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
-        this.pool = new HashMap<>();
+        this.pool = new ConcurrentHashMap<>();
         this.numPages = numPages;
+        this.lockManager = new LockManager();
     }
 
     public static int getPageSize() {
@@ -74,6 +75,9 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
         // some code goes here
+
+        this.lockManager.getLock(pid, tid, perm);
+
         if (!this.pool.containsKey(pid)) {
             Page page = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
 
@@ -84,7 +88,8 @@ public class BufferPool {
 
             this.pool.put(pid, page);
         }
-        return this.pool.get(pid);    }
+        return this.pool.get(pid);
+    }
 
     /**
      * Releases the lock on a page.
@@ -98,6 +103,7 @@ public class BufferPool {
     public  void releasePage(TransactionId tid, PageId pid) {
         // some code goes here
         // not necessary for lab1|lab2
+        this.lockManager.releaseLock(pid, tid);
     }
 
     /**
@@ -108,13 +114,14 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        this.transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
         // not necessary for lab1|lab2
-        return false;
+        return this.lockManager.holdsLock(p, tid, LockType.ANY);
     }
 
     /**
@@ -128,6 +135,21 @@ public class BufferPool {
             throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+
+        // check if we need to commit or abort
+        if (!commit) {
+            // abort
+            for (PageId pid: this.pool.keySet()) {
+                TransactionId currTid = this.pool.get(pid).isDirty();
+                // we discard any dirty pages so that the dirty changes will not be seen by any other transactions
+                if (currTid != null && currTid.equals(tid)) {
+                    this.discardPage(pid);
+                }
+            }
+        } else { // commit by flushing all pages
+            this.flushPages(tid);
+        }
+        this.lockManager.releaseAllLocks(tid);
     }
 
     /**
@@ -245,6 +267,12 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+        for (PageId pid : pool.keySet()) {
+            TransactionId currTid = pool.get(pid).isDirty();
+            if(currTid != null && currTid.equals(tid)) {
+                flushPage(pid);
+            }
+        }
     }
 
     /**
@@ -260,15 +288,32 @@ public class BufferPool {
             return;
         }
 
-        // pool size is equal or greater than numPages, we need to evict
-        PageId pageId = new ArrayList<PageId>(this.pool.keySet()).get( (int) Math.floor(Math.random() * this.pool.size()));
+        // get the random page from the buffer pool to evict
+        int random = (int) Math.floor(Math.random() * this.pool.size());
+        ArrayList<PageId> evictList = new ArrayList<>(this.pool.keySet());
+
+        PageId pid = evictList.get(random);
+        Page randomPage = this.pool.get(pid);
+
+        while (randomPage.isDirty() != null) {
+            if (evictList.isEmpty()) {
+                throw new DbException("No pages to evict. All pages are dirty");
+            }
+            evictList.remove(pid);
+
+            if (!evictList.isEmpty()) {
+                random = (int) Math.floor(Math.random() * evictList.size());
+                pid = evictList.get(random);
+                randomPage = this.pool.get(pid);
+            }
+        }
 
         try {
-            this.flushPage(pageId);
+            this.flushPage(pid);
         } catch (IOException e) {
             throw new DbException("Page flush during eviction failed.");
         }
-        this.pool.remove(pageId);
+        this.pool.remove(pid);
     }
 
 }
