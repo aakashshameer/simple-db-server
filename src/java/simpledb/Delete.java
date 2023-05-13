@@ -86,9 +86,8 @@ public class Delete extends Operator {
 
             // return one field tuple consisting of number of deleted records
             return result;
-        } else {
-            return null;
         }
+        return null;
     }
 
     @Override

@@ -153,7 +153,7 @@ public class HeapFile implements DbFile {
         // some code goes here
         // not necessary for lab1
         ArrayList<Page> modifiedPage = new ArrayList<>();
-        PageId pid = t.getRecordId().pid;
+        PageId pid = t.getRecordId().getPageId();
         HeapPage page = (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
 
         // delete tuple

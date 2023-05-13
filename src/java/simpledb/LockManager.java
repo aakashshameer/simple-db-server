@@ -100,8 +100,8 @@ public class LockManager {
             wait();
             if (sharedLockOnPage(pid)) {
                 if (!upgradeLock(pid, tid)) {
-                    checkBecauseSharedLock(pid, tid);
                     checkBecauseExclusiveLock(pid, tid);
+                    checkBecauseSharedLock(pid, tid);
                 }
             }
         } catch (InterruptedException e) {
@@ -273,8 +273,9 @@ public class LockManager {
         if (this.lockTracker.containsKey(tid1)) {
             this.lockTracker.get(tid1).add(tid2);
         } else {
-            this.lockTracker.put(tid1, new HashSet<>());
-            this.lockTracker.get(tid1).add(tid2);
+            HashSet<TransactionId> dependencySet = new HashSet<>();
+            dependencySet.add(tid2);
+            this.lockTracker.put(tid1, dependencySet);
         }
     }
 

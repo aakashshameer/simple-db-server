@@ -259,8 +259,8 @@ public class HeapPage implements Page {
             throw new DbException("tuple slot wasn't being used and is already empty.");
         }
 
-        this.tuples[id] = null; // delete tuple
         markSlotUsed(id, false);
+        this.tuples[id] = null; // delete tuple
 
     }
 

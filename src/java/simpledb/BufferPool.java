@@ -82,9 +82,7 @@ public class BufferPool {
             Page page = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
 
             // if pool size is greater or equal than numPages, we need to evict
-            if (this.pool.size() >= this.numPages) {
-                this.evictPage();
-            }
+            this.evictPage();
 
             this.pool.put(pid, page);
         }
@@ -107,6 +105,19 @@ public class BufferPool {
     }
 
     /**
+     * Checks if a specified transaction id holds a lock on a specified page
+     *
+     * @param tid the ID of the transaction we want to check for locks
+     * @param pid the page id we want to check for locks
+     * @return true if tid holds some type of lock on pid
+     */
+    public boolean holdsLock(TransactionId tid, PageId pid) {
+        // some code goes here
+        // not necessary for lab1|lab2
+        return this.lockManager.holdsLock(pid, tid, LockType.ANY);
+    }
+
+    /**
      * Release all locks associated with a given transaction.
      *
      * @param tid the ID of the transaction requesting the unlock
@@ -115,13 +126,6 @@ public class BufferPool {
         // some code goes here
         // not necessary for lab1|lab2
         this.transactionComplete(tid, true);
-    }
-
-    /** Return true if the specified transaction has a lock on the specified page */
-    public boolean holdsLock(TransactionId tid, PageId p) {
-        // some code goes here
-        // not necessary for lab1|lab2
-        return this.lockManager.holdsLock(p, tid, LockType.ANY);
     }
 
     /**
@@ -177,9 +181,12 @@ public class BufferPool {
         for (Page page: modifiedPage) {
             page.markDirty(true, tid);
             // TODO: Aakash, do a check for containsKey in buffer pool?
-
-            this.evictPage();
-            this.pool.put(page.getId(), page);
+            if (!this.pool.containsKey(page.getId())) {
+                this.evictPage();
+                this.pool.put(page.getId(), page);
+            } else {
+                this.pool.put(page.getId(), page);
+            }
         }
     }
 
@@ -207,9 +214,12 @@ public class BufferPool {
         for (Page page: modifiedPage) {
             page.markDirty(true, tid);
             // TODO: Aakash, do a check for containsKey in buffer pool?
-
-            this.evictPage();
-            this.pool.put(page.getId(), page);
+            if (!this.pool.containsKey(page.getId())) {
+                this.evictPage();
+                this.pool.put(page.getId(), page);
+            } else {
+                this.pool.put(page.getId(), page);
+            }
         }
     }
 
