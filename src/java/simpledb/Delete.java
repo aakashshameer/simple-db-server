@@ -26,7 +26,7 @@ public class Delete extends Operator {
     public Delete(TransactionId t, OpIterator child) {
         // some code goes here
         this.child = child;
-        this.tid = tid;
+        this.tid = t;
         this.alreadyCalled = false;
     }
 
