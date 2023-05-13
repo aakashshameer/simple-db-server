@@ -176,6 +176,8 @@ public class BufferPool {
         ArrayList<Page> modifiedPage = file.insertTuple(tid, t);
         for (Page page: modifiedPage) {
             page.markDirty(true, tid);
+            // TODO: Aakash, do a check for containsKey in buffer pool?
+
             this.evictPage();
             this.pool.put(page.getId(), page);
         }
@@ -204,6 +206,8 @@ public class BufferPool {
         ArrayList<Page> modifiedPage = file.deleteTuple(tid, t);
         for (Page page: modifiedPage) {
             page.markDirty(true, tid);
+            // TODO: Aakash, do a check for containsKey in buffer pool?
+
             this.evictPage();
             this.pool.put(page.getId(), page);
         }
@@ -221,20 +225,6 @@ public class BufferPool {
             this.flushPage(pageId);
         }
 
-    }
-
-    /** Remove the specific page id from the buffer pool.
-     Needed by the recovery manager to ensure that the
-     buffer pool doesn't keep a rolled back page in its
-     cache.
-
-     Also used by B+ tree files to ensure that deleted pages
-     are removed from the cache so they can be reused safely
-     */
-    public synchronized void discardPage(PageId pid) {
-        // some code goes here
-        // not necessary for lab1
-        this.pool.remove(pid);
     }
 
     /**
@@ -273,6 +263,20 @@ public class BufferPool {
                 flushPage(pid);
             }
         }
+    }
+
+    /** Remove the specific page id from the buffer pool.
+     Needed by the recovery manager to ensure that the
+     buffer pool doesn't keep a rolled back page in its
+     cache.
+
+     Also used by B+ tree files to ensure that deleted pages
+     are removed from the cache so they can be reused safely
+     */
+    public synchronized void discardPage(PageId pid) {
+        // some code goes here
+        // not necessary for lab1
+        this.pool.remove(pid);
     }
 
     /**
