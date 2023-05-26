@@ -1,6 +1,7 @@
 
 package simpledb;
 
+import javax.xml.crypto.Data;
 import java.io.*;
 import java.util.*;
 import java.lang.reflect.*;
@@ -82,6 +83,7 @@ public class LogFile {
     static final int UPDATE_RECORD = 3;
     static final int BEGIN_RECORD = 4;
     static final int CHECKPOINT_RECORD = 5;
+    static final int CLR_RECORD = 6;
     static final long NO_CHECKPOINT_ID = -1;
 
     final static int INT_SIZE = 4;
@@ -92,6 +94,24 @@ public class LogFile {
     int totalRecords = 0; // for PatchTest //protected by this
 
     HashMap<Long,Long> tidToFirstLogRecord = new HashMap<Long,Long>();
+
+    private static class CLR {
+        private long toUndoOffset;
+        private long tidId;
+        private Page before;
+
+        CLR(long toUndoOffset, long tidId, Page before) {
+            this.toUndoOffset = toUndoOffset;
+            this.tidId = tidId;
+            this.before = before;
+        }
+
+        long getTidId() {return this.tidId;}
+
+        long getToUndoOffset() {return this.toUndoOffset;}
+
+        Page getBefore() {return this.before;}
+    }
 
     /** Constructor.
         Initialize and back the log file with the specified file.
@@ -466,8 +486,88 @@ public class LogFile {
         synchronized (Database.getBufferPool()) {
             synchronized(this) {
                 preAppend();
-                // some code goes here
+                long tidId = tid.getId();
+
+                // get the start of the log file
+                long beginRollbackOffset = this.tidToFirstLogRecord.get(tidId);
+
+                // an aborted transaction is a "loser" transaction
+                // we must undo a "loser" transaction
+
+                HashSet<Long> loserIds = new HashSet<>();
+                loserIds.add(tidId);
+                this.undo(beginRollbackOffset, loserIds);
             }
+        }
+    }
+
+    private synchronized void undo(long beginUndoOffset, HashSet<Long> toUndoTidIds) throws NoSuchElementException, IOException, EOFException {
+        preAppend();
+
+        this.raf.seek(beginUndoOffset);
+        // We must undo backwards due to us read the log file forwards
+        // Stack is used to pop off and undo the latest log records first
+
+        Stack<CLR> stack = new Stack<CLR>();
+
+        // we read the log file and add all UPDATE_RECORD associated with the aborting transaction to the CLR
+        while (true) {
+            try {
+                long toUndoOffset = this.raf.getFilePointer();
+
+                // every log record begins with an int and a long int (transaction Id)
+                int recordType = this.raf.readInt();
+                long recordTidId = this.raf.readLong();
+
+                if (recordType == CHECKPOINT_RECORD) {
+                    // format of the checkpoint record is an integer count of the number of transactions,
+                    // a long integer transaction id and a long integer first record offset for each active transaction
+                    int transactionNum = this.raf.readInt();
+                    this.raf.skipBytes( transactionNum * (LONG_SIZE * 2));
+                } else if (recordType == UPDATE_RECORD) {
+                    // consist of two entries: before and after image
+
+                    Page before = readPageData(this.raf);
+                    Page after = readPageData(this.raf);
+                    assert(before.getId().getTableId() == after.getId().getTableId());
+
+                    // check if the update records are associated with the aborting transaction
+                    if (toUndoTidIds.contains(recordTidId)) {
+                        CLR clr = new CLR(toUndoOffset, recordTidId, before);
+                        stack.push(clr);
+                    }
+                }
+
+                // each log record ends with a long integer file offset that represents the position in the log file where the record began
+                // need to skip the long to go to the next record to find the all update record associated with the aborting transactions
+                this.raf.skipBytes(LONG_SIZE);
+            } catch (EOFException e) {
+                break;
+            }
+        }
+
+        // log records in the CLR are only UPDATE_RECORDS associated with aborting transactions
+        // we pop CLRS off the stack and and undo all log records in the CLR
+        while (!stack.isEmpty()) {
+            CLR clr = stack.pop();
+            long tidId = clr.getTidId();
+            long toUndoOffset = clr.getToUndoOffset();
+            Page before = clr.getBefore();
+
+            this.raf.writeInt(CLR_RECORD);
+            this.raf.writeLong(tidId);
+            this.raf.writeLong(toUndoOffset);
+            this.raf.writeLong(this.currentOffset);
+            this.currentOffset = this.raf.getFilePointer();
+
+            // write the before image to the table file on disk
+            HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(before.getId().getTableId());
+            heapFile.writePage(before);
+
+            this.force();
+
+            // we have to discard any page from the buffer pool whose before-image we write back to the table file
+            Database.getBufferPool().discardPage(before.getId());
         }
     }
 
@@ -494,6 +594,110 @@ public class LogFile {
             synchronized (this) {
                 recoveryUndecided = false;
                 // some code goes here
+
+                HashSet<Long> loserTidIds = new HashSet<>();
+
+                // read the last checkpoint if exist
+                this.raf.seek(0);
+                long lastCheckpointOffset = this.raf.readLong();
+
+                // if there is a last checkpoint, we want to get all the active transaction
+                if (lastCheckpointOffset != NO_CHECKPOINT_ID) {
+                    this.raf.seek(lastCheckpointOffset);
+
+                    assert(this.raf.readInt() == CHECKPOINT_RECORD);
+
+                    this.raf.skipBytes(LONG_SIZE);
+
+                    int transactionNum = this.raf.readInt();
+
+                    for (int i = 0; i < transactionNum; i++) {
+                        // get the long integer transaction id
+                        Long recordTidId = this.raf.readLong();
+                        loserTidIds.add(recordTidId);
+
+                        // get the long integer record offset for active transaction
+                        Long recordFirstOffset = this.raf.readLong();
+                        this.tidToFirstLogRecord.put(recordTidId, recordFirstOffset);
+                    }
+
+                    // each log record ends with a long integer file offset that represents the position in the log file where the record began
+                    // need to skip the long to go to the next record to find the all update record associated with the aborting transactions
+                    this.raf.skipBytes(LONG_SIZE);
+                }
+
+                // we redo update during this pass
+                while (true) {
+                    try {
+                        Long beginRecordOffset = this.raf.getFilePointer();
+
+                        int recordType = this.raf.readInt();
+                        Long recordTidId = this.raf.readLong();
+                        Page before, after;
+                        HeapFile heapFile;
+
+                        switch (recordType) {
+                            case BEGIN_RECORD:
+                                loserTidIds.add(recordTidId);
+                                this.tidToFirstLogRecord.put(recordTidId, beginRecordOffset);
+                                break;
+                            case ABORT_RECORD:
+                            case COMMIT_RECORD:
+                                loserTidIds.remove(recordTidId);
+                                this.tidToFirstLogRecord.remove(recordTidId);
+                                break;
+                            case UPDATE_RECORD:
+                                before = readPageData(this.raf);
+                                after = readPageData(this.raf);
+                                assert(before.getId().getTableId() == after.getId().getTableId());
+
+                                heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(after.getId().getTableId());
+                                heapFile.writePage(after);
+                                break;
+                            case CLR_RECORD:
+                                long toUndoOffset = this.raf.readLong();
+                                long filePointer = this.raf.getFilePointer();
+
+                                // log record begin with an int and long int (transaction id)
+                                this.raf.seek(toUndoOffset);
+                                int undoType = this.raf.readInt();
+                                Long undoTidId = this.raf.readLong();
+                                assert (undoTidId.equals(recordTidId));
+
+                                if (undoType == UPDATE_RECORD) {
+                                    // consist of before and after image
+                                    before = readPageData(this.raf);
+                                    after = readPageData(this.raf);
+                                    assert(before.getId().getTableId() == after.getId().getTableId());
+
+                                    // write the before image to the table file on disk
+                                    heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(after.getId().getTableId());
+                                    heapFile.writePage(before);
+
+                                    // we have to discard any page from the buffer pool whose before-image we write back to the table file
+                                    Database.getBufferPool().discardPage(before.getId());
+                                }
+                                this.raf.seek(filePointer);
+                                break;
+
+                            default:
+                                break;
+                        }
+                        // each log record ends with a long integer file offset that represents the position in the log file where the record began
+                        // need to skip the long to go to the next record to find the all update record associated with the aborting transactions
+                        this.raf.skipBytes(LONG_SIZE);
+                    } catch (EOFException e) {
+                        break;
+                    }
+                }
+                this.force();
+
+                long beginUndoOffset = logFile.length();
+                for (Long tidId: loserTidIds) {
+                    beginUndoOffset = Math.min(beginUndoOffset, this.tidToFirstLogRecord.get(tidId));
+                    this.tidToFirstLogRecord.remove(tidId);
+                }
+                this.undo(beginUndoOffset, loserTidIds);
             }
          }
     }
