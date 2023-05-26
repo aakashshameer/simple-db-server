@@ -150,8 +150,18 @@ public class BufferPool {
                     this.discardPage(pid);
                 }
             }
-        } else { // commit by flushing all pages
-            this.flushPages(tid);
+        } else {
+            // LAB 3: commit by flushing all pages
+            // this.flushPages(tid);
+            // LAB 4: NO-FORCE: no longer force pages to disk when committing
+            for (Page p: this.pool.values()) {
+                // add dirty pages to the log
+                Database.getLogFile().logWrite(tid, p.getBeforeImage(),p);
+                // force the log to disk
+                Database.getLogFile().force();
+                // use curr page contents as the before image because the dirty changes cannot be seen
+                p.setBeforeImage();
+            }
         }
         this.lockManager.releaseAllLocks(tid);
     }
@@ -180,7 +190,6 @@ public class BufferPool {
         ArrayList<Page> modifiedPage = file.insertTuple(tid, t);
         for (Page page: modifiedPage) {
             page.markDirty(true, tid);
-            // TODO: Aakash, do a check for containsKey in buffer pool?
             if (!this.pool.containsKey(page.getId())) {
                 this.evictPage();
                 this.pool.put(page.getId(), page);
@@ -252,12 +261,22 @@ public class BufferPool {
 
         // buffer pool contains page
         Page page = this.pool.get(pid);
-        TransactionId dirty = page.isDirty();
-        if (dirty != null) { // check if page is dirty
+        TransactionId dirtier = page.isDirty();
+        if (dirtier != null) { // check if page is dirty
             // page is dirty, we want to write it to disk
             HeapFile heapFile = (HeapFile) Database.getCatalog().getDatabaseFile(pid.getTableId());
+
+            // check if the transaction that cause this page to be dirty is still executing,
+            // if it is, we have to change the log
+            if (this.lockManager.holdsLock(pid, dirtier, LockType.ANY)) {
+                Database.getLogFile().logWrite(dirtier, page.getBeforeImage(), page);
+                Database.getLogFile().force();
+            }
+
             heapFile.writePage(page);
             page.markDirty(false, null);
+
+
         }
 
     }
@@ -309,18 +328,20 @@ public class BufferPool {
         PageId pid = evictList.get(random);
         Page randomPage = this.pool.get(pid);
 
-        while (randomPage.isDirty() != null) {
-            if (evictList.isEmpty()) {
-                throw new DbException("No pages to evict. All pages are dirty");
-            }
-            evictList.remove(pid);
-
-            if (!evictList.isEmpty()) {
-                random = (int) Math.floor(Math.random() * evictList.size());
-                pid = evictList.get(random);
-                randomPage = this.pool.get(pid);
-            }
-        }
+        //        we are checking if the random pages are dirty
+        //        if pages are dirty, we do not evict
+        //        while (randomPage.isDirty() != null) {
+        //            if (evictList.isEmpty()) {
+        //                throw new DbException("No pages to evict. All pages are dirty");
+        //            }
+        //            evictList.remove(pid);
+        //
+        //            if (!evictList.isEmpty()) {
+        //                random = (int) Math.floor(Math.random() * evictList.size());
+        //                pid = evictList.get(random);
+        //                randomPage = this.pool.get(pid);
+        //            }
+        //        }
 
         try {
             this.flushPage(pid);
